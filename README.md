@@ -1,46 +1,86 @@
 # HarNOA
 
-**Har**mony **N**ative **O**n **A**ndroid-hardware —— 在已有 Android 内核与驱动的设备上，以最小代价把 OpenHarmony / HarmonyOS 用户态拉起来的通用启动框架。
+**HarmonyOS NEXT On Android devices**
 
-> 状态：**骨架阶段**。目前只定义启动方式、目录约定与板级接口，还不能直接在任何设备上开机。
+让 HarmonyOS NEXT（纯血鸿蒙）跑在 Android 手机上。
 
-## 思路
+HarNOA 是一个开放的移植项目：对象是任何能解锁 bootloader 的 Android 设备，目标是让鸿蒙 NEXT 成为这些设备上能日常使用的系统，最终要能装官方镜像、和 Android 双系统共存，并由社区一台台适配。
 
-不移植内核、不重写驱动、不动 Android 分区。复用设备现成的 Android GKI 内核与 vendor 驱动，只在内核上补少量配置（如 `CONFIG_PID_NS`）和一个独立命名的 IPC（binder）模块，然后：
+> 当前阶段：**项目骨架**。已经定下统一的启动方式和设备适配接口；其余子系统按[路线图](docs/ROADMAP.md)陆续并入。参考设备 Redmi K90 Pro Max 上的原型已经能日常使用：桌面、网页、短信、音频、Wi-Fi、蓝牙等。这些成果会逐步整理进本仓库。
+
+## 为什么能做
+
+鸿蒙 NEXT 的用户态（init、samgr、ArkUI、ArkWeb、应用框架）本身与硬件无关，需要的只是：
+
+- 一个满足鸿蒙要求的 Linux 内核：Android GKI 只需补少量配置，再加一个独立的 IPC 模块
+- 一层硬件适配：显示、输入、音频、通信……可以直接复用 Android vendor 现成的驱动和 HAL
+
+所以 HarNOA **不重写驱动，也不碰 Android 分区**，只在中间搭一座桥。每接入一台新设备，主要工作量都在“桥”这一层，而且大部分是同一 SoC 平台通用的。
+
+## 项目范围
+
+| 子系统 | 说明 | 状态 |
+|---|---|---|
+| **boot** | 启动入口（RAM / recovery 双系统 / 仅内核）、第一阶段 init、用户态拉起 | 骨架已有 |
+| **kernel** | GKI 增量配置、独立 IPC（binder）模块、鸿蒙依赖的内核特性 | 规划 |
+| **hal-bridge** | 显示合成、GPU（Mesa/Turnip）、触摸、音频、相机、传感器、振动：鸿蒙 HDI ⇄ Android HAL | 规划 |
+| **connectivity** | 基带（通话/短信/数据）、Wi-Fi、蓝牙、GNSS | 规划 |
+| **system** | 服务裁剪、SA 管理、cgroup 与功耗、存储、调度 | 规划 |
+| **security** | HUKS、设备证明、TEE 兼容 | 研究 |
+| **app-compat** | 应用市场、账号、推送、第三方应用兼容 | 研究 |
+| **installer** | 一键 RAM 启动、双系统写入与恢复、OTA | 规划 |
+| **devices** | 每台设备一个板目录；按 SoC 平台共享公共部分 | 1 台参考设备 |
+
+## 架构一览
 
 ```
-S0 入口      fastboot boot（RAM，零写入） / recovery 槽（无内核 ramdisk） / boot 槽仅换内核
-S1 harnoa-init   静态 PID1：挂 /proc /sys /dev、按清单加载模块、找数据分区、失败安全回 Android
-S2 harnoa up     宿主段：拉起 Android vendor 桥（板级钩子）、加载 IPC 模块、挂 erofs 系统镜像
-S3 harnoa inner  隔离段：私有 mount/UTS 命名空间，组装 /dev /proc /sys、服务清单、覆盖层
-S4 鸿蒙 init     exec /system/bin/init --second-stage（带垫片：伪 PID1 + seccomp）
+          ┌──────────────── HarmonyOS NEXT 用户态（原版，只读） ────────────────┐
+          │  init · samgr · foundation · render_service · ArkWeb · 应用          │
+          └──────────────▲───────────────────────────────▲─────────────────────────┘
+                         │ 鸿蒙 HDI / VDI                 │ IPC
+   ┌─────────────────────┴────────────┐         ┌──────────┴──────────┐
+   │ HarNOA hal-bridge / connectivity │         │ 独立 IPC 模块        │
+   └─────────────────────▲────────────┘         └──────────▲──────────┘
+                         │ Android HAL（vendor 原样）      │
+   ┌─────────────────────┴───────────────────────────────┴─────────────────────┐
+   │        Android GKI 内核 + vendor 模块（增量配置，Android 照常可用）          │
+   └───────────────────────────────────▲───────────────────────────────────────┘
+                                       │ HarNOA boot：RAM / rec / dual 入口
+                              设备原厂 bootloader（已解锁）
 ```
 
-设备相关的一切放进 `boards/<厂商>-<代号>/`：一个 `board.conf` 加若干钩子脚本。`core/` 保持与设备无关。
-
-## 目录
+## 仓库结构
 
 | 路径 | 内容 |
 |---|---|
-| `core/stage1/` | `harnoa-init`：通用第一阶段 init（C，静态链接） |
-| `core/stage2/` | `harnoa.sh`：用户态拉起器（busybox sh），`lib/` 为分段实现 |
-| `core/shim/` | `hnshim.so`：注入鸿蒙 init 的垫片（伪 PID1、拦危险系统调用） |
-| `boot/` | `mkimg.sh`：按板级配置生成 ram / rec / dual 三种入口镜像 |
-| `boards/_template/` | 新设备模板 |
-| `boards/xiaomi-myron/` | 参考板：Redmi K90 Pro Max（SM8850） |
-| `profiles/` | 服务清单（最小桌面集等） |
-| `docs/` | 架构、启动流程、移植指南 |
+| `core/` | 与设备无关的启动核心（stage1 init、stage2 拉起器、垫片） |
+| `boot/` | 入口镜像生成 |
+| `boards/` | 设备适配：`_template/` 为模板，`xiaomi-myron/` 为参考设备 |
+| `profiles/` | 鸿蒙服务清单（core / minimal / …） |
+| `docs/` | 架构、启动入口、移植指南、路线图 |
 
-## 快速了解
+后续子系统会以 `kernel/`、`bridge/`、`connectivity/`、`platforms/<SoC>/` 等目录加入。
 
-- [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) — 分层与各阶段职责
-- [docs/BOOT_ENTRIES.md](docs/BOOT_ENTRIES.md) — 三种入口为什么这样设计
-- [docs/PORTING.md](docs/PORTING.md) — 新设备移植步骤
+## 文档
+
+- [路线图](docs/ROADMAP.md)
+- [架构](docs/ARCHITECTURE.md)：分层与启动阶段
+- [启动入口](docs/BOOT_ENTRIES.md)：三种入口的设计
+- [移植新设备](docs/PORTING.md)
+- [参与贡献](CONTRIBUTING.md)
+
+## 设备
+
+| 设备 | SoC | 状态 |
+|---|---|---|
+| Redmi K90 Pro Max（myron） | Snapdragon 8 Elite Gen 5 / SM8850 | 参考设备，原型可日常使用，正在并入 |
+
+欢迎提交你的设备。
 
 ## 致谢
 
-分层（通用核心 / 板级描述 / 组件）的组织方式受 UniXNU（如 [zg7681/UniXNU-myron](https://github.com/zg7681/UniXNU-myron)）启发；HarNOA 的启动方式、配置格式与实现均为独立设计。
+“通用核心 + 板级描述”的组织方式受 UniXNU（如 [zg7681/UniXNU-myron](https://github.com/zg7681/UniXNU-myron)）启发；HarNOA 的启动方式、接口与实现均为独立设计。
 
-## 许可
+## 声明与许可
 
-Apache-2.0。不包含任何厂商固件、系统镜像或闭源二进制，这些需由使用者从自己的设备/官方渠道获取。
+代码采用 Apache-2.0。本项目**不分发**任何华为系统镜像、厂商固件或闭源二进制，请使用者从自己的设备或官方渠道合法获取。HarmonyOS 是华为技术有限公司的商标，本项目与华为、小米及其他厂商无关。

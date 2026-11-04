@@ -1,5 +1,7 @@
 # 架构
 
+本文描述 HarNOA 的整体分层，以及目前已落地的**启动子系统**。其他子系统见 [ROADMAP.md](ROADMAP.md)。
+
 ## 设计原则
 
 1. **借内核，不改内核**：Android GKI 内核 + vendor 模块原样使用，只增量补配置和独立 IPC 模块（节点名与 Android binder 不冲突，两套用户态可共存）。
