@@ -1,0 +1,5 @@
+# 仅验证 IPC 与 SA 注册（新设备第一步）
+hilogd.cfg
+samgr_standard.cfg
+param_watcher.cfg
+access_token.cfg

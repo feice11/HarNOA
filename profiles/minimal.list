@@ -1,0 +1,23 @@
+# 最小桌面集：IPC/SA 注册 → 基础服务 → 显示 → 桌面。
+# 每行: cfg文件名 [额外 sed 表达式]；native: 前缀仅原生启动
+hilogd.cfg
+samgr_standard.cfg
+param_watcher.cfg
+access_token.cfg
+hiview.cfg
+faultloggerd.cfg
+foundation.cfg
+installs.cfg
+storage_daemon.cfg
+storage_manager.cfg
+accountmgr.cfg
+huks_service.cfg
+distributed_data.cfg
+hdf_devmgr.cfg
+device_manager.cfg
+appspawn.cfg
+ui_service.cfg
+timeservice.cfg
+resource_schedule_service.cfg
+native:graphic.cfg
+native:bootanimation.cfg

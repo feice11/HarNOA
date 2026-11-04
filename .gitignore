@@ -1,0 +1,7 @@
+out/
+*.img
+*.ko
+*.so
+core/stage1/harnoa-init
+work/
+log/

@@ -1,0 +1,1 @@
+# 由设备 vendor_boot + vendor_dlkm + system_dlkm 的 modules.load 合并生成（不随仓库分发模块本体）。

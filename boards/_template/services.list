@@ -1,0 +1,3 @@
+# 板级追加服务，格式同 profiles/*.list：
+#   cfg文件名 [额外 sed 表达式]
+#   native:cfg文件名    仅原生启动时启用

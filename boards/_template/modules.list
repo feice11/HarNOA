@@ -1,0 +1,2 @@
+# 每行一个模块，路径相对于 HN_MODULES_DIR。按加载顺序排列，harnoa-init 会多轮重试解决依赖。
+# 通常由 Android 的 vendor_boot / vendor_dlkm / system_dlkm 的 modules.load 合并而来。
